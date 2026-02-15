@@ -1,0 +1,582 @@
+---
+title: "GeoMorpho"
+format: html
+editor: visual
+---
+
+# Why Study Wing Veins? - Pen version
+
+```{r include=FALSE}
+#working directory
+#knitr::opts_knit$set(root.dir = "C:\Users\meloe\OneDrive\School\Biology\Bio 455\My code")
+```
+
+```{r}
+#libraries
+library(StereoMorph)
+library(tidyverse)
+library(rgl)
+library(geomorph)
+library(RRPP)
+library(ggplot2)
+library(Morpho)
+library(randomForest)
+library(caret)
+library(abind)
+library(plotly)
+library(dawai)
+
+```
+
+If you're scared, go look at the README. Hopefully that'll clarify things!
+
+Un-comment out the code the code block below to run stereomorph
+
+```{r}
+#| label: Landmarking client Stereomorph
+#digitizeImage(image.file='wings/images', shapes.file="wings/Shapes",landmarks.ref="wings/landmarks.txt")
+
+```
+
+Sex separated code for Eumel- for morphoJ (outputs tps)
+
+```         
+#Sex separated code for all specimens and separating to just Eumel
+#read in all metadata
+wingdata = read_csv("wings/wings_final_eumel.csv") #
+
+#split by sex
+wings_m = wingdata %>% filter(Sex == "M")
+wings_f = wingdata %>% filter(Sex == "F")
+
+#converting the groups to factors
+wings_m$Label<-as.factor(wings_m$Label)
+wings_f$Label<-as.factor(wings_f$Label)
+
+
+#create list of male and female files
+male_ids = wings_m$Accession
+male_files <- paste0("wings/shapes/JRW", male_ids, ".txt") #need to change cause this is a lazy workaround
+
+female_ids = wings_f$Accession
+female_files <- paste0("wings/shapes/JRW", female_ids, ".txt")
+
+#get shapes for each group
+male_shapes <- readShapes(male_files)
+male_data <- readland.shapes(male_shapes)
+
+female_shapes <- readShapes(female_files) #turns stereomorph files into a list
+female_data <- readland.shapes(female_shapes)
+
+
+
+land_mat = as.matrix(male_data$landmarks)
+land_mat_again = male_shapes$landmarks.pixel
+
+fdir <- "C:/Users/meloe/OneDrive/School/Biology/Bio 455/My code/wings/Shapes_eumel" #change where this goes
+
+writeLMToTPS(fdir, 'Shapes_eumel.tps')
+```
+
+Sex separated code for all specimens with Eumel toggle
+
+```{r}
+#Sex separated code for all specimens
+#read in all metadata
+wingdata = read_csv("wings/wings_final_all.csv") 
+
+#wingdata= wingdata %>% filter(Subgenus == 'Eumel') 
+#if you put Eumel sorting back, make sure to comment out the anova and cva for subgenus
+
+#split by sex
+wings_m = wingdata %>% filter(Sex == "M")
+wings_f = wingdata %>% filter(Sex == "F")
+
+#converting the groups to factors
+wings_m$Label<-as.factor(wings_m$Label)
+wings_f$Label<-as.factor(wings_f$Label)
+wings_m$Subgenus<-as.factor(wings_m$Subgenus)
+wings_f$Subgenus<-as.factor(wings_f$Subgenus)
+
+#create list of male and female files
+male_ids = wings_m$Accession
+male_files <- paste0("wings/shapes/JRW", male_ids, ".txt") #need to change cause JRW is a lazy workaround
+
+female_ids = wings_f$Accession
+female_files <- paste0("wings/shapes/JRW", female_ids, ".txt")
+
+#get shapes for each group
+male_shapes <- readShapes(male_files)
+male_data <- readland.shapes(male_shapes)
+
+female_shapes <- readShapes(female_files) #turns stereomorph files into a list
+female_data <- readland.shapes(female_shapes)
+
+#procrustes fits
+MY.gpa <- gpagen(male_data, print.progress = F)
+MY.gpa = rotate.coords(MY.gpa, "flipY")
+
+
+FY.gpa <- gpagen(female_data, print.progress = F)
+FY.gpa = rotate.coords(FY.gpa, "flipY")
+#male pca
+MPCA <- gm.prcomp(MY.gpa$coords)
+
+#summary(MPCA)
+plot(MPCA,label=TRUE)
+
+mpc_scores<-MPCA[[10]]
+
+#female pca
+FPCA <- gm.prcomp(FY.gpa$coords)
+
+#summary(FPCA)
+plot(FPCA,label=TRUE)
+
+fpc_scores<-FPCA[[10]]
+
+
+#preparing for visualization
+mpc_scores2<-cbind(wings_m,mpc_scores)
+fpc_scores2<-cbind(wings_f,fpc_scores)
+
+
+#scree plots for weight of principal components
+mscree = MPCA$sdev^2 / sum(MPCA$sdev^2)
+qplot(c(1:34), mscree) + #34 is the number of principal components of the pca, check by looking at length of scree
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Male Bee Principal Component Importance") +
+  ylim(0, 1)
+
+fscree = FPCA$sdev^2 / sum(FPCA$sdev^2)
+qplot(c(1:34), fscree) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Female Bee Principal Component Importance") +
+  ylim(0, 1)
+
+
+#ggplots
+ggplot(mpc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "Male Geometric Morphometrics",
+       x = "PC1", y = "PC2") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75) # + geom_text(label=mpc_scores2$Label, vjust=2)
+
+ggplot(fpc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "Female Geometric Morphometrics",
+       x = "PC1", y = "PC2") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75) #+ geom_text(label=fpc_scores2$Label, vjust=2)
+
+
+
+anov_label_m = procD.lm(MY.gpa$coords~wings_m$Label)
+#plot(anov_label_m)
+#summary(anov_label_m)
+
+anov_label_f = procD.lm(FY.gpa$coords~wings_f$Label)
+#summary(anov_label_f)
+
+anov_subgen_m = procD.lm(MY.gpa$coords~wings_m$Subgenus)
+#summary(anov_subgen_m)
+
+anov_subgen_f = procD.lm(FY.gpa$coords~wings_f$Subgenus)
+#summary(anov_subgen_f)
+
+
+cvaa_label_m = CVA(MY.gpa$coords, groups = mpc_scores2$Label, cv=TRUE)
+#cvaa_subgenus_m = CVA(MY.gpa$coords, groups = mpc_scores2$Subgenus, cv=TRUE)
+
+cvaa_label_m
+#cvaa_subgenus_m
+
+cvaa_label_f = CVA(FY.gpa$coords,groups = fpc_scores2$Label, cv=TRUE)
+cvaa_subgenus_f = CVA(FY.gpa$coords,groups = fpc_scores2$Subgenus, cv=TRUE)
+
+cvaa_label_f
+cvaa_subgenus_f
+```
+
+```{r}
+#Sex separated code for all specimens and separating to just Eumel
+#read in all metadata
+wingdata = read_csv("wings/wings_final_eumel.csv") #wing_asap has columns Accession, Sex, Label, ASAP, and Sequence
+
+#wingdata_eumel = wingdata %>% filter(Subgenus == 'Eumel') 
+
+#split by sex
+wings_m = wingdata %>% filter(Sex == "M")
+wings_f = wingdata %>% filter(Sex == "F")
+
+#converting the groups to factors
+wings_m$Label<-as.factor(wings_m$Label)
+wings_f$Label<-as.factor(wings_f$Label)
+
+
+#create list of male and female files
+male_ids = wings_m$Accession
+male_files <- paste0("wings/shapes/JRW", male_ids, ".txt") #need to change cause this is a lazy workaround
+
+female_ids = wings_f$Accession
+female_files <- paste0("wings/shapes/JRW", female_ids, ".txt")
+
+#get shapes for each group
+male_shapes <- readShapes(male_files)
+male_data <- readland.shapes(male_shapes)
+
+female_shapes <- readShapes(female_files) #turns stereomorph files into a list
+female_data <- readland.shapes(female_shapes)
+
+#procrustes fits
+MY.gpa <- gpagen(male_data, print.progress = F)
+
+MY.gpa = rotate.coords(MY.gpa, "flipY")
+
+
+FY.gpa <- gpagen(female_data, print.progress = F)
+FY.gpa = rotate.coords(FY.gpa, "flipY")
+#male pca
+MPCA <- gm.prcomp(MY.gpa$coords)
+
+#summary(MPCA)
+plot(MPCA,label=TRUE)
+
+mpc_scores<-MPCA[[10]]
+
+#female pca
+FPCA <- gm.prcomp(FY.gpa$coords)
+
+#summary(FPCA)
+plot(FPCA,label=TRUE)
+
+fpc_scores<-FPCA[[10]]
+
+#preparing for visualization
+mpc_scores2<-cbind(wings_m,mpc_scores)
+fpc_scores2<-cbind(wings_f,fpc_scores)
+
+#scree plots for weight of principal components
+mscree = MPCA$sdev^2 / sum(MPCA$sdev^2)
+qplot(c(1:34), mscree) + #34 is the number of principal components of the pca, check by looking at length of scree
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Male Bee Principal Component Importance") +
+  ylim(0, 1)
+
+fscree = FPCA$sdev^2 / sum(FPCA$sdev^2)
+qplot(c(1:34), fscree) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Female Bee Principal Component Importance") +
+  ylim(0, 1)
+
+#ggplots
+ggplot(mpc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "Eumelissodes Male Geometric Morphometrics",
+       x = "PC1", y = "PC2") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75)  #+ geom_text(label=mpc_scores2$Accession, vjust=2)
+
+ggplot(mpc_scores2, aes(x=Comp2,y=Comp3, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "Eumelissodes Male Geometric Morphometrics",
+       x = "PC2", y = "PC3") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75) # + geom_text(label=mpc_scores2$Label, vjust=2)
+
+ggplot(mpc_scores2, aes(x=Comp1,y=Comp3, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "Eumelissodes Male Geometric Morphometrics",
+       x = "PC1", y = "PC3") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75) # + geom_text(label=mpc_scores2$Label, vjust=2)
+
+
+
+ggplot(fpc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "Eumelissodes Female Geometric Morphometrics",
+       x = "PC1", y = "PC2") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75) #+ geom_text(label=fpc_scores2$Accession, vjust=2)
+
+ggplot(fpc_scores2, aes(x=Comp3,y=Comp2, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "Eumelissodes Female Geometric Morphometrics",
+       x = "PC3", y = "PC2") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75) #+ geom_text(label=fpc_scores2$Label, vjust=2)
+
+anov_label_m = procD.lm(MY.gpa$coords~wings_m$Label)
+#plot(anov_label_m)
+summary(anov_label_m)
+
+anov_label_f = procD.lm(FY.gpa$coords~wings_f$Label)
+summary(anov_label_f)
+
+cvaa_label_m=CVA(MY.gpa$coords,groups = mpc_scores2$Label, cv=TRUE)
+cvaa_label_f=CVA(FY.gpa$coords,groups = fpc_scores2$Label, cv=TRUE)
+
+cvaa_label_m
+cvaa_label_f
+```
+
+All specimens (with Eumel option) unseparated by sex
+
+```{r}
+#unseparated by sex
+#read in all metadata
+wingdata = read_csv("wings/wings_final_all.csv") #wing_asap has columns Accession, Sex, Label, ASAP, and Sequence
+
+#wingdata = wingdata %>% filter(Subgenus == 'Eumel') 
+
+
+wingdata$Label<-as.factor(wingdata$Label)
+wingdata$Sex<-as.factor(wingdata$Sex)
+wingdata$Subgenus <- as.factor(wingdata$Subgenus)
+
+
+
+wing_ids = wingdata$Accession
+wing_files = paste0("wings/shapes/JRW", wing_ids, ".txt")
+wing_shapes <- readShapes(wing_files)
+wing_data <- readland.shapes(wing_shapes)
+
+
+
+Y.gpa <- gpagen(wing_data, print.progress = F)
+Y.gpa = rotate.coords(Y.gpa, "flipY")
+#plotAllSpecimens(Y.gpa$coords, label = TRUE)
+#plotOutliers(Y.gpa$coords, inspect.outliers = TRUE)
+#the only male Agilis4 is our sole outlier
+
+
+
+anov_sex = procD.lm(Y.gpa$coords~wingdata$Sex)
+summary(anov_sex)
+
+
+anov_label = procD.lm(Y.gpa$coords ~ wingdata$Label)
+summary(anov_label)
+
+#anov_genus = procD.lm(Y.gpa$coords ~ wingdata$Subgenus )
+#summary(anov_genus)
+
+PCA <- gm.prcomp(Y.gpa$coords)
+
+#summary(PCA)
+#plot(PCA,label=TRUE)
+pc_scores<-PCA[[10]]
+pc_scores2<-cbind(wingdata,pc_scores)
+
+
+cvaa_label=CVA(Y.gpa$coords,groups = pc_scores2$Label, cv=TRUE)
+cvaa_sex=CVA(Y.gpa$coords,groups = pc_scores2$Sex, cv=TRUE)
+#cvaa_subgenus = CVA(Y.gpa$coords,groups = pc_scores2$Subgenus, cv=TRUE)
+
+cvaa_label
+cvaa_sex
+#cvaa_subgenus
+
+
+ggplot
+ggplot(pc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+  geom_point(aes(color=Label, shape=Sex), size=3) + 
+  labs(title = "All Geometric Morphometrics",
+       x = "PC1", y = "PC2") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75) #+ 
+  #geom_text(label=pc_scores2$Label, vjust=2)
+
+ggplot(pc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "All Geometric Morphometrics",
+     x = "PC1", y = "PC2") +
+ theme_classic() + stat_ellipse(type="norm", level = 0.75) + 
+ #geom_text(label=pc_scores2$Label, vjust=2) +
+ facet_wrap(Sex~., nrow=2)
+
+```
+
+Everything below is outdated
+
+```{r include = FALSE}
+#read in all metadata
+wingmetadata = read_csv("wings/wings_asap_pen_copy_copy.csv") #wing_asap has columns Accession, Sex, Label, ASAP, and Sequence
+asap_labels = read_csv("wings/ASAP_label_pen.csv") #asap_label has columns ASAP and ASAP label
+wingdata = wingmetadata %>% left_join(asap_labels, by = "ASAP") #squishing them together i think
+
+#split by sex
+wings_m = wingdata %>% filter(Sex == "M")
+wings_f = wingdata %>% filter(Sex == "F")
+
+#converting the groups to factors
+wings_m$Label<-as.factor(wings_m$Label)
+wings_f$Label<-as.factor(wings_f$Label)
+
+
+#create list of male and female files
+male_ids = wings_m$Accession
+male_files <- paste0("wings/shapes/JRW", male_ids, ".txt") #need to change cause this is a lazy workaround
+
+female_ids = wings_f$Accession
+female_files <- paste0("wings/shapes/JRW", female_ids, ".txt")
+
+#get shapes for each group
+male_shapes <- readShapes(male_files)
+male_data <- readland.shapes(male_shapes)
+
+female_shapes <- readShapes(female_files) #turns stereomorph files into a list
+female_data <- readland.shapes(female_shapes)
+
+
+```
+
+## Normalizing Landmarks (Image Alignment)
+
+*Ryan and Kaiona's code autogenerated missing landmarks. Don't do that. There was only one sample with a missing landmark, so I took it out of the dataset. - Pen*
+
+```{r}
+#procrustes fits
+MY.gpa <- gpagen(male_data, print.progress = F)
+
+MY.gpa = rotate.coords(MY.gpa, "flipY")
+
+
+FY.gpa <- gpagen(female_data, print.progress = F)
+FY.gpa = rotate.coords(FY.gpa, "flipY")
+```
+
+### Variation of normalized male landmarks
+
+*This allows us to visualize outliers, and confirm that landmarks have been placed correctly. Not essential for biological analysis, but helpful nonetheless - Pen*
+
+```{r echo=FALSE}
+plotAllSpecimens(MY.gpa$coords, label = TRUE)
+
+plotOutliers(MY.gpa$coords, inspect.outliers = TRUE)
+```
+
+### Variation of normalized female landmarks
+
+```{r echo=FALSE}
+plotAllSpecimens(FY.gpa$coords, label = TRUE)
+
+plotOutliers(FY.gpa$coords, inspect.outliers = TRUE)
+```
+
+By visualizing the landmarks this way, we can confirm that there were no issues with data entry, as specimens with incorrectly-placed landmarks would be detected as outliers at this point.
+
+## Initial PCA of landmarks
+
+```{r}
+#male pca
+MPCA <- gm.prcomp(MY.gpa$coords)
+
+#summary(MPCA)
+plot(MPCA,label=TRUE)
+
+mpc_scores<-MPCA[[10]]
+
+#female pca
+FPCA <- gm.prcomp(FY.gpa$coords)
+#summary(FPCA)
+plot(FPCA,label=TRUE)
+
+fpc_scores<-FPCA[[10]]
+
+#preparing for visualization
+mpc_scores2<-cbind(wings_m,mpc_scores)
+fpc_scores2<-cbind(wings_f,fpc_scores)
+
+#scree plots for weight of principal components
+mscree = MPCA$sdev^2 / sum(MPCA$sdev^2)
+qplot(c(1:34), mscree) + #34 is the number of principal components of the pca, check by looking at length of scree
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Male Bee Principal Component Importance") +
+  ylim(0, 1)
+
+fscree = FPCA$sdev^2 / sum(FPCA$sdev^2)
+qplot(c(1:34), fscree) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Female Bee Principal Component Importance") +
+  ylim(0, 1)
+
+#ggplots
+ggplot(mpc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "Male Geometric Morphometrics",
+       x = "PC1", y = "PC2") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75)  + geom_text(label=mpc_scores2$Label, vjust=2)
+
+ggplot(fpc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+  geom_point(aes(color=Label), size=3) + 
+  labs(title = "Female Geometric Morphometrics",
+       x = "PC1", y = "PC2") +
+  theme_classic() + stat_ellipse(type="norm", level = 0.75) + geom_text(label=fpc_scores2$Label, vjust=2)
+```
+
+These visualizations plot each specimens' values for the first two principal components, colors according to the group we assigned them going in, then draws an ellipse around all the points in a group with at least 3 specimens. We can see that the males are all extremely clustered. Individuals in the agilis/trinodis complex can be approximately differentiated from individuals of other species based on the value of PC1, but only barely, and individual variation is still huge. Female bees clustered similarly, for the most part, but individuals of the same group can still be placed very far from one another.
+
+```{r}
+anov_label = procD.lm(MY.gpa$coords~wings_m$Label)
+
+
+plot(anov_label)
+summary(anov_label)
+```
+
+### Combining all shape data, departitioning by sex.
+
+```{r}
+wingdata$Label<-as.factor(wingdata$Label)
+wingdata$Sex<-as.factor(wingdata$Sex)
+
+wing_ids = wingdata$Accession
+wing_files = paste0("wings/shapes/JRW", wing_ids, ".txt")
+wing_shapes <- readShapes(wing_files)
+wing_data <- readland.shapes(wing_shapes)
+
+
+
+Y.gpa <- gpagen(wing_data, print.progress = F)
+Y.gpa = rotate.coords(Y.gpa, "flipY")
+#plotAllSpecimens(Y.gpa$coords, label = TRUE)
+#plotOutliers(Y.gpa$coords, inspect.outliers = TRUE)
+#the only male Agilis4 is our sole outlier
+
+PCA <- gm.prcomp(Y.gpa$coords)
+#summary(PCA)
+#plot(PCA,label=TRUE)
+pc_scores<-PCA[[10]]
+
+#pc_scores2<-cbind(wingdata,pc_scores)
+
+#ggplot
+#ggplot(pc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+  #geom_point(aes(color=Label, shape=Sex), size=3) + 
+  #labs(title = "All Geometric Morphometrics",
+  #     x = "PC1", y = "PC2") +
+ # theme_classic() + stat_ellipse(type="norm", level = 0.75) 
+ #+ geom_text(label=pc_scores2$Label, vjust=2)
+
+#ggplot(pc_scores2, aes(x=Comp1,y=Comp2, color=Label)) + 
+#  geom_point(aes(color=Label), size=3) + 
+#  labs(title = "All Geometric Morphometrics",
+  #     x = "PC1", y = "PC2") +
+ # theme_classic() + stat_ellipse(type="norm", level = 0.75) + 
+ #+ geom_text(label=pc_scores2$Label, vjust=2) +
+ # facet_wrap(Sex~., nrow=2)
+```
+
+```{r}
+anov_sex = procD.lm(Y.gpa$coords~wingdata$Sex)
+anov_label = procD.lm(MY.gpa$coords~wings_m$Label)
+
+plot(anov_sex)
+```
