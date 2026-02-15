@@ -1,2 +1,4 @@
 # Wing-Morphometrics
-Wing Morphometrics of Melissodes agilis for Research in Ecological Interactions
+Wing Morphometrics of Oregon *Melissodes* bees for Research in Ecological Interactions
+
+Oregon has over 600 species of native bees, spanning 55 genera, one of which is *Melissodes*. *Melissodes*, common name “longhorn bees,” are members of the family Apidae, and are pollinators of sunflowers and related species. This research focuses on two species, *M. agilis* and *M. trinodis* in the subgenus *Eumelissodes*, which are both morphologically and genetically near impossible to distinguish. We used wing morphometrics and phylogenetic analysis of COX1 sequence data to determine how many clades are present in Oregon, whether any of them are true M. agilis, and whether they align with the clades found by Justin Roch at University of Massechusetts. Our results confirm the relationship between *Melissodes* species and wing shape, and lend more insight into the cryptic species complex that is *M. agilis* and *M. trinodis.* We confirm that there is likely an undescribed *Eumelissodes* species and suggest that *M. agilis* and *M. trinodis* are likely the same species. 
